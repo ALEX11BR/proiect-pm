@@ -1,0 +1,128 @@
+>>> import machine
+>>> pin16 = machine.Pin(16)
+>>> pin16 = machine.Pin(16, machine.Pin.OUT)
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin16.on()
+>>> pin16.off()
+>>> pin28 = machine.Pin(28)
+>>> adc28 = machine.ADC(pin28)
+>>> adc28.read_u16()
+51164
+>>> adc28.read_u16()
+11394
+>>> adc28.read_u16()
+11330
+>>> adc28.read_u16()
+11554
+>>> adc28.read_u16()
+65535
+>>> adc28.read_u16()
+65535
+>>> adc28.read_u16()
+50700
+>>> adc28.read_u16()
+50316
+>>> adc28.read_u16()
+50604
+>>> adc28.read_u16()
+50316
+>>> adc28.read_u16()
+50732
+>>> adc28.read_u16()
+51244
+>>> adc28.read_u16()
+51212
+>>> adc28.read_u16()
+51276
+>>> adc28.read_u16()
+35432
+>>> adc28.read_u16()
+22677
+>>> adc28.read_u16()
+768
+>>> adc28.read_u16()
+816
+>>> adc28.read_u16()
+800
+>>> adc28.read_u16()
+784
+>>> adc28.read_u16()
+50748
+>>> adc28.read_u16()
+65535
+>>> adc28.read_u16()
+65535
+>>> adc28.read_u16()
+65535
+>>> adc28.read_u16()
+51484
+>>> adc28.read_u16()
+1328
+>>> adc28.read_u16()
+1216
+>>> adc28.read_u16()
+32824
+>>> adc28.read_u16()
+65535
+>>> adc28.read_u16()
+32583
+>>> adc28.read_u16()
+592
+>>> adc28.read_u16()
+32663
+>>> adc28.read_u16()
+33368
+>>> adc28.read_u16()
+33192
+>>> adc28.read_u16()
+65327
+>>> adc28.read_u16()
+65535
+>>> adc28.read_u16()
+65359
+>>> adc28.read_u16()
+47339
+>>> adc28.read_u16()
+304
+>>> adc28.read_u16()
+320
+>>> adc28.read_u16()
+288
+>>> adc28.read_u16()
+8001
+>>> adc28.read_u16()
+30679
+>>> adc28.read_u16()
+33176
+>>> 
+
