@@ -13,15 +13,8 @@ var snake = [{ x: 5, y: 5 }, { x: 4, y: 5 }];
 var direction = DIRECTIONS.RIGHT;
 var food = { x: 2, y: 5 }; // Initial food position
 var score = 0;
-var gameOver = false;
-var ticks = 0;
-
-
-// initial setup
-for (var i = 0; i < snake.length; i++) {
-	brickMainDraw(snake[i].x, snake[i].y, 1);
-}
-brickMainDraw(food.x, food.y, 2);
+var lives = 4;
+var started = false;
 
 
 function isCollision(segment) {
@@ -64,7 +57,8 @@ function moveSnake() {
 
 	// Check for collisions with walls or self
 	if (isCollision(newHead)) {
-		gameOver = true;
+		lives--;
+		brickGameOver(newHead.x, newHead.y, lives === 0);
 		return;
 	}
 
@@ -84,20 +78,37 @@ function moveSnake() {
 
 
 // Event handlers
-function handleTick() {
-	brickMainDraw(0, 0, 0 + (ticks % 2 === 0));
-	ticks++;
+function handleInit() {
+	snake = [{ x: 5, y: 5 }, { x: 4, y: 5 }];
+	direction = DIRECTIONS.RIGHT;
+	food = { x: 2, y: 5 };
+	started = false;
 
-	moveSnake();
+	for (var i = 0; i < snake.length; i++) {
+		brickMainDraw(snake[i].x, snake[i].y, 1);
+	}
+	brickMainDraw(food.x, food.y, 2);
+
+	for (var i = 0; i < lives; i++) {
+		brickSecondaryDraw(i, 0, 1);
+	}
+}
+
+function handleTick() {
+	if (started) {
+		moveSnake();
+	}
 }
 
 function handleAction() {
+	started = true;
 	brickTickReset();
 	moveSnake();
 }
 
 function handleUp() {
 	if (direction !== DIRECTIONS.DOWN) {
+		started = true;
 		direction = DIRECTIONS.UP;
 		brickTickReset();
 		moveSnake();
@@ -106,6 +117,7 @@ function handleUp() {
 
 function handleDown() {
 	if (direction !== DIRECTIONS.UP) {
+		started = true;
 		direction = DIRECTIONS.DOWN;
 		brickTickReset();
 		moveSnake();
@@ -114,6 +126,7 @@ function handleDown() {
 
 function handleLeft() {
 	if (direction !== DIRECTIONS.RIGHT) {
+		started = true;
 		direction = DIRECTIONS.LEFT;
 		brickTickReset();
 		moveSnake();
@@ -122,6 +135,7 @@ function handleLeft() {
 
 function handleRight() {
 	if (direction !== DIRECTIONS.LEFT) {
+		started = true;
 		direction = DIRECTIONS.RIGHT;
 		brickTickReset();
 		moveSnake();

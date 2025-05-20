@@ -21,7 +21,7 @@
 
 #define DRAW_TIME 100
 #define JOYSTICK_READ_TIME 50
-#define SUBTICK_TIME 50
+#define TICK_TIME 500
 
 #define DEBOUNCE_TIME 50
 #define JOYSTICK_MIN_THRESH 100
@@ -29,6 +29,10 @@
 
 #define MAIN_SCREEN_WIDTH 10
 #define MAIN_SCREEN_HEIGHT 20
+#define SECONDARY_SCREEN_WIDTH 4
+#define SECONDARY_SCREEN_HEIGHT 4
+#define SECONDARY_SCREEN_X_OFFSET 89
+#define SECONDARY_SCREEN_Y_OFFSET 63
 #define CELL_SIZE 8
 
 #define SCREEN_RENDER_0 0
@@ -43,6 +47,7 @@
 
 volatile bool screenUpdate = false;
 volatile uint8_t mainScreenCells[MAIN_SCREEN_HEIGHT][MAIN_SCREEN_WIDTH];
+volatile uint8_t secondaryScreenCells[SECONDARY_SCREEN_HEIGHT][SECONDARY_SCREEN_WIDTH];
 
 TFT_eSPI tft = TFT_eSPI();
 
@@ -55,6 +60,31 @@ repeating_timer tickTimer;
 volatile bool isPaused = false;
 volatile long vibrateUntil = LONG_MAX;
 
+volatile unsigned long pausePressTime = 0;
+
+
+void gameInit() {
+    noInterrupts();
+
+    for (int y = 0; y < MAIN_SCREEN_HEIGHT; y++) {
+        for (int x = 0; x < MAIN_SCREEN_WIDTH; x++) {
+            mainScreenCells[y][x] = SCREEN_NO_RENDER;
+        }
+    }
+    for (int y = 0; y < SECONDARY_SCREEN_HEIGHT; y++) {
+        for (int x = 0; x < SECONDARY_SCREEN_WIDTH; x++) {
+            secondaryScreenCells[y][x] = SCREEN_NO_RENDER;
+        }
+    }
+    screenUpdate = false;
+
+    tft.fillScreen(BACKGROUND_COLOR);
+    tft.drawLine(MAIN_SCREEN_WIDTH * CELL_SIZE + 1, 0, MAIN_SCREEN_WIDTH * CELL_SIZE + 1, tft.height(), FOREGROUND_COLOR);
+    tft.drawRect(SECONDARY_SCREEN_X_OFFSET - 1, SECONDARY_SCREEN_Y_OFFSET - 1, SECONDARY_SCREEN_WIDTH * CELL_SIZE + 3, SECONDARY_SCREEN_HEIGHT * CELL_SIZE + 3, FOREGROUND_COLOR);
+
+    duk_eval_string(ctx, "handleInit();");
+    interrupts();
+}
 
 bool drawTimerCallback(repeating_timer *t) {
     noInterrupts();
@@ -85,6 +115,28 @@ bool drawTimerCallback(repeating_timer *t) {
                             break;
                     }
                     mainScreenCells[y][x] = SCREEN_NO_RENDER;
+                }
+            }
+        }
+
+        // draw the secondary screen
+        for (int y = 0; y < SECONDARY_SCREEN_HEIGHT; y++) {
+            for (int x = 0; x < SECONDARY_SCREEN_WIDTH; x++) {
+                if (secondaryScreenCells[y][x] != SCREEN_NO_RENDER) {
+                    switch (secondaryScreenCells[y][x]) {
+                        case SCREEN_RENDER_0:
+                            tft.fillRect(SECONDARY_SCREEN_X_OFFSET + x * CELL_SIZE, SECONDARY_SCREEN_Y_OFFSET + y * CELL_SIZE, CELL_SIZE, CELL_SIZE, BACKGROUND_COLOR);
+                            break;
+                        case SCREEN_RENDER_1:
+                            tft.drawRect(SECONDARY_SCREEN_X_OFFSET + x * CELL_SIZE + 1, SECONDARY_SCREEN_Y_OFFSET + y * CELL_SIZE + 1, CELL_SIZE - 1, CELL_SIZE - 1, FOREGROUND_COLOR);
+                            tft.fillRect(SECONDARY_SCREEN_X_OFFSET + x * CELL_SIZE + 3, SECONDARY_SCREEN_Y_OFFSET + y * CELL_SIZE + 3, CELL_SIZE - 5, CELL_SIZE - 5, FOREGROUND_COLOR);
+                            break;
+                        case SCREEN_RENDER_HALF:
+                            tft.drawRect(SECONDARY_SCREEN_X_OFFSET + x * CELL_SIZE + 1, SECONDARY_SCREEN_Y_OFFSET + y * CELL_SIZE + 1, CELL_SIZE - 1, CELL_SIZE - 1, SECONDARY_COLOR);
+                            tft.fillRect(SECONDARY_SCREEN_X_OFFSET + x * CELL_SIZE + 3, SECONDARY_SCREEN_Y_OFFSET + y * CELL_SIZE + 3, CELL_SIZE - 5, CELL_SIZE - 5, SECONDARY_COLOR);
+                            break;
+                    }
+                    secondaryScreenCells[y][x] = SCREEN_NO_RENDER;
                 }
             }
         }
@@ -154,11 +206,11 @@ bool readJoystickTimerCallback(repeating_timer *t) {
         pressedDown = false;
     }
 
+    watchdog_update();
     interrupts();
     return true;
 }
 
-volatile long subticks = 0;
 bool tickTimerCallback(repeating_timer *t) {
     noInterrupts();
     watchdog_update();
@@ -168,12 +220,8 @@ bool tickTimerCallback(repeating_timer *t) {
         return true;
     }
 
-    subticks++;
-    if (subticks >= 10) {
-        subticks = 0;
-        // handle tick
-        duk_eval_string(ctx, "handleTick();");
-    }
+    // handle tick
+    duk_eval_string(ctx, "handleTick();");
 
     interrupts();
     return true;
@@ -185,7 +233,23 @@ int64_t vibrateEndCallback(alarm_id_t t, void *data) {
 }
 
 int64_t tickTimerAddCallback(alarm_id_t t, void *data) {
-    add_repeating_timer_ms(SUBTICK_TIME, tickTimerCallback, NULL, &tickTimer);
+    add_repeating_timer_ms(TICK_TIME, tickTimerCallback, NULL, &tickTimer);
+    return 0;
+}
+
+int64_t brickRestartCallback(alarm_id_t t, void *data) {
+    if ((bool) data) {
+        watchdog_reboot(0, 0, 0);
+        return 0;
+    }
+
+    // Restart the game
+    isPaused = false;
+    pausePressTime = 0; // enable pause button
+
+    analogWrite(VIBRATION_PIN, 0);
+    gameInit();
+
     return 0;
 }
 
@@ -231,15 +295,69 @@ duk_ret_t brickMainDraw(duk_context *ctx) {
     return 0;
 }
 
+duk_ret_t brickSecondaryDraw(duk_context *ctx) {
+    // Parameters:
+    // * x: x coordinate
+    // * y: y coordinate
+    // * color: color to draw (1 = on, 0 = off)
+    int x = duk_get_int(ctx, 0);
+    int y = duk_get_int(ctx, 1);
+    int color = duk_get_int(ctx, 2);
+
+    if (x < 0 || x >= SECONDARY_SCREEN_WIDTH || y < 0 || y >= SECONDARY_SCREEN_HEIGHT) {
+        return 0; // Out of bounds
+    }
+
+    switch (color) {
+        case 0:
+            secondaryScreenCells[y][x] = SCREEN_RENDER_0;
+            break;
+        case 1:
+            secondaryScreenCells[y][x] = SCREEN_RENDER_1;
+            break;
+        case 2:
+            secondaryScreenCells[y][x] = SCREEN_RENDER_HALF;
+            break;
+    }
+    screenUpdate = true;
+
+    return 0;
+}
+
 duk_ret_t brickTickReset(duk_context *ctx) {
-    subticks = 0;
+    cancel_repeating_timer(&tickTimer);
+    add_repeating_timer_ms(TICK_TIME, tickTimerCallback, NULL, &tickTimer);
+    return 0;
+}
+
+duk_ret_t brickGameOver(duk_context *ctx) {
+    // Parameters:
+    // * x: x coordinate
+    // * y: y coordinate
+    int x = duk_get_int(ctx, 0);
+    int y = duk_get_int(ctx, 1);
+    bool noRestart = duk_get_boolean(ctx, 2);
+
+    x = std::min(std::max(x, 2), MAIN_SCREEN_WIDTH - 3);
+    y = std::min(std::max(y, 2), MAIN_SCREEN_HEIGHT - 3);
+
+    tft.drawLine((x - 2) * CELL_SIZE + 1, (y - 2) * CELL_SIZE + 1, (x + 3) * CELL_SIZE - 1, (y + 3) * CELL_SIZE - 1, TFT_RED);
+    tft.drawLine((x + 3) * CELL_SIZE - 1, (y - 2) * CELL_SIZE + 1, (x - 2) * CELL_SIZE + 1, (y + 3) * CELL_SIZE - 1, TFT_RED);
+    isPaused = true;
+    pausePressTime = ULONG_MAX; // disable pause button
+
+    analogWrite(VIBRATION_PIN, 255);
+    add_alarm_in_ms(1000, brickRestartCallback, (void *) noRestart, false);
+
     return 0;
 }
 
 const duk_function_list_entry brickFunctionList[] = {
     {"brickVibrate", brickVibrate, 2},
     {"brickMainDraw", brickMainDraw, 3},
+    {"brickSecondaryDraw", brickSecondaryDraw, 3},
     {"brickTickReset", brickTickReset, 0},
+    {"brickGameOver", brickGameOver, 3},
     {NULL, NULL, 0}
 };
 
@@ -265,6 +383,7 @@ void actionPress() {
     // handle button press
     duk_eval_string(ctx, "handleAction();");
 
+    watchdog_update();
     interrupts();
 }
 void actionRelease() {
@@ -312,7 +431,6 @@ void restartRelease() {
     interrupts();
 }
 
-volatile unsigned long pausePressTime = 0;
 void pauseRelease();
 void pausePress() {
     noInterrupts();
@@ -393,18 +511,16 @@ void setup() {
 
     add_repeating_timer_ms(DRAW_TIME, drawTimerCallback, NULL, &drawTimer);
     add_repeating_timer_ms(JOYSTICK_READ_TIME, readJoystickTimerCallback, NULL, &joystickTimer);
-    add_repeating_timer_ms(SUBTICK_TIME, tickTimerCallback, NULL, &tickTimer);
-    watchdog_enable(SUBTICK_TIME * 40, false);
+    add_repeating_timer_ms(TICK_TIME, tickTimerCallback, NULL, &tickTimer);
+    watchdog_enable(TICK_TIME * 4, false);
 
     LittleFS.begin();
-
-    tft.fillScreen(BACKGROUND_COLOR);
-    tft.drawLine(MAIN_SCREEN_WIDTH * CELL_SIZE + 1, 0, MAIN_SCREEN_WIDTH * CELL_SIZE + 1, tft.height(), FOREGROUND_COLOR);
 
     File gameFile = LittleFS.open("/games/snake.js", "r");
     duk_eval_string(ctx, gameFile.readString().c_str());
     gameFile.close();
 
+    gameInit();
 }
 
 void loop() {
