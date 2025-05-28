@@ -352,6 +352,7 @@ duk_ret_t brickGameOver(duk_context *ctx) {
     // Parameters:
     // * x: x coordinate
     // * y: y coordinate
+    // * noRestart: if true, the game will not be restarted after the game over
     int x = duk_get_int(ctx, 0);
     int y = duk_get_int(ctx, 1);
     bool noRestart = duk_get_boolean(ctx, 2);
