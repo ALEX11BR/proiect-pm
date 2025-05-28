@@ -1,23 +1,27 @@
+function handleInit() {
+	// TODO
+}
+
 function handleTick() {
-    // TODO
+	// TODO
 }
 
 function handleAction() {
-    // TODO
+	// TODO
 }
 
 function handleUp() {
-    // TODO
+	// TODO
 }
 
 function handleLeft() {
-    // TODO
+	// TODO
 }
 
 function handleRight() {
-    // TODO
+	// TODO
 }
 
 function handleDown() {
-    // TODO
+	// TODO
 }

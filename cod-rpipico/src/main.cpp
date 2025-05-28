@@ -51,7 +51,7 @@ volatile uint8_t secondaryScreenCells[SECONDARY_SCREEN_HEIGHT][SECONDARY_SCREEN_
 
 TFT_eSPI tft = TFT_eSPI();
 
-duk_context *ctx = duk_create_heap_default();
+duk_context *ctx;
 
 repeating_timer drawTimer;
 repeating_timer joystickTimer;
@@ -62,7 +62,10 @@ volatile long vibrateUntil = LONG_MAX;
 
 volatile unsigned long pausePressTime = 0;
 
+extern const duk_function_list_entry brickFunctionList[];
 
+
+// Does a game initialization. This happens when the game is loaded or restarted by means of e.g. losing a life.
 void gameInit() {
     noInterrupts();
 
@@ -84,6 +87,21 @@ void gameInit() {
 
     duk_eval_string(ctx, "handleInit();");
     interrupts();
+}
+
+// Initializes the duktape context and loads the game script from the specified path and starts the game with gameInit.
+void gameLoad(const char *gamePath) {
+    ctx = duk_create_heap_default();
+
+    duk_push_global_object(ctx);
+    duk_put_function_list(ctx, -1, brickFunctionList);
+    duk_pop(ctx);
+
+    File gameFile = LittleFS.open(gamePath, "r");
+    duk_eval_string(ctx, gameFile.readString().c_str());
+    gameFile.close();
+
+    gameInit();
 }
 
 bool drawTimerCallback(repeating_timer *t) {
@@ -352,12 +370,26 @@ duk_ret_t brickGameOver(duk_context *ctx) {
     return 0;
 }
 
+duk_ret_t brickLoad(duk_context *ctx) {
+    // Parameters:
+    // * gamePath: path to the game script
+    const char *gamePath = duk_get_string(ctx, 0);
+
+    if (gamePath == NULL || strlen(gamePath) == 0) {
+        return DUK_RET_TYPE_ERROR; // Invalid path
+    }
+
+    gameLoad(gamePath);
+    return 0;
+}
+
 const duk_function_list_entry brickFunctionList[] = {
     {"brickVibrate", brickVibrate, 2},
     {"brickMainDraw", brickMainDraw, 3},
     {"brickSecondaryDraw", brickSecondaryDraw, 3},
     {"brickTickReset", brickTickReset, 0},
     {"brickGameOver", brickGameOver, 3},
+    {"brickLoad", brickLoad, 1},
     {NULL, NULL, 0}
 };
 
@@ -472,10 +504,6 @@ void setup() {
     //tft.fillScreen(TFT_BLACK);
     //tft.drawRect(60, 20, 40, 40, TFT_RED);
 
-    duk_push_global_object(ctx);
-    duk_put_function_list(ctx, -1, brickFunctionList);
-    duk_pop(ctx);
-
     pinMode(JOYSTICK_X_PIN, INPUT);
     pinMode(JOYSTICK_Y_PIN, INPUT);
 
@@ -516,11 +544,7 @@ void setup() {
 
     LittleFS.begin();
 
-    File gameFile = LittleFS.open("/games/snake.js", "r");
-    duk_eval_string(ctx, gameFile.readString().c_str());
-    gameFile.close();
-
-    gameInit();
+    gameLoad("/games/menu.js");
 }
 
 void loop() {
